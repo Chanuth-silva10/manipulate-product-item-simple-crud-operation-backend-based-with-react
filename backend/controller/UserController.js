@@ -4,19 +4,37 @@ const catchAsyncErrors = require("../middleware/catchAsyncErrors");
 const sendToken = require("../utils/jwtToken");
 const sendMail = require("../utils/sendMail.js");
 const crypto = require("crypto");
+const cloudinary = require("cloudinary");
 
 // Register user
 exports.createUser = catchAsyncErrors(async (req, res, next) => {
   const { name, email, password, avatar } = req.body;
 
+  // user = await User.create({
+  //   name,
+  //   email,
+  //   password,
+  //   avatar: {
+  //     public_id: "Profile",
+  //     url: "https://www.pexels.com/search/profile%20picture/",
+  //   },
+  // });
+  let user = await User.findOne({ email });
+  if (user) {
+    return res
+      .status(400)
+      .json({ success: false, message: "User already exists" });
+  }
+
+  const myCloud = await cloudinary.v2.uploader.upload(avatar, {
+    folder: "avatars",
+  });
+
   user = await User.create({
     name,
     email,
     password,
-    avatar: {
-      public_id: "Profile",
-      url: "https://www.pexels.com/search/profile%20picture/",
-    },
+    avatar: { public_id: myCloud.public_id, url: myCloud.secure_url },
   });
 
   sendToken(user, 201, res);
@@ -173,13 +191,13 @@ exports.updatePassword = catchAsyncErrors(async (req, res, next) => {
 });
 
 // Update User Profile
-exports.updateProfile = catchAsyncErrors(async(req,res,next) =>{
-    const newUserData = {
-        name: req.body.name,
-        email: req.body.email,
-    };
+exports.updateProfile = catchAsyncErrors(async (req, res, next) => {
+  const newUserData = {
+    name: req.body.name,
+    email: req.body.email,
+  };
 
-   if (req.body.avatar !== "") {
+  if (req.body.avatar !== "") {
     const user = await User.findById(req.user.id);
 
     const imageId = user.avatar.public_id;
@@ -209,66 +227,64 @@ exports.updateProfile = catchAsyncErrors(async(req,res,next) =>{
 });
 
 // Get All users ---Admin
-exports.getAllUsers = catchAsyncErrors(async (req,res,next) =>{
+exports.getAllUsers = catchAsyncErrors(async (req, res, next) => {
   const users = await User.find();
 
   res.status(200).json({
-      success: true,
-      users,
+    success: true,
+    users,
   });
 });
 
 // Get Single User Details ---Admin
-exports.getSingleUser = catchAsyncErrors(async (req,res,next) =>{
+exports.getSingleUser = catchAsyncErrors(async (req, res, next) => {
   const user = await User.findById(req.params.id);
- 
-  if(!user){
-      return next(new ErrorHandler("User is not found with this id",400));
+
+  if (!user) {
+    return next(new ErrorHandler("User is not found with this id", 400));
   }
 
   res.status(200).json({
-      success: true,
-      user,
+    success: true,
+    user,
   });
 });
 
 // Change user Role --Admin
-exports.updateUserRole = catchAsyncErrors(async(req,res,next) =>{
+exports.updateUserRole = catchAsyncErrors(async (req, res, next) => {
   const newUserData = {
-      name: req.body.name,
-      email: req.body.email,
-      role: req.body.role,
+    name: req.body.name,
+    email: req.body.email,
+    role: req.body.role,
   };
-  const user = await User.findByIdAndUpdate(req.params.id,newUserData, {
-      new: true,
-      runValidators: true,
-      useFindAndModify: false,
+  const user = await User.findByIdAndUpdate(req.params.id, newUserData, {
+    new: true,
+    runValidators: true,
+    useFindAndModify: false,
   });
 
   res.status(200).json({
-      success: true,
-      user
-  })
+    success: true,
+    user,
+  });
 });
 
 // Delete User ---Admin
-exports.deleteUser = catchAsyncErrors(async(req,res,next) =>{
+exports.deleteUser = catchAsyncErrors(async (req, res, next) => {
+  const user = await User.findById(req.params.id);
 
- const user = await User.findById(req.params.id);
+  const imageId = user.avatar.public_id;
 
- const imageId = user.avatar.public_id;
+  await cloudinary.v2.uploader.destroy(imageId);
 
-
-
-  if(!user){
-      return next(new ErrorHandler("User is not found with this id",400));
+  if (!user) {
+    return next(new ErrorHandler("User is not found with this id", 400));
   }
 
   await user.remove();
 
   res.status(200).json({
-      success: true,
-      message:"User deleted successfully"
-  })
+    success: true,
+    message: "User deleted successfully",
+  });
 });
-
